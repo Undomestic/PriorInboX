@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings - PriorInBox</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./priorInboX-home.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">PriorInBox</div>
+      <ul>
+        <li><a href="priorInboX-home.html">🏠 Home</a></li>
+        <li><a href="emails.html">📨 Emails</a></li>
+        <li class="active"><a href="account-settings.html">⚙️ Settings</a></li>
+        <li><a href="about-us.html">👤 About Us</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+      <!-- Hamburger Menu for Mobile -->
+      <button class="hamburger-menu" id="hamburgerMenu">☰</button>
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+      <!-- Top -->
+      <header class="topbar">
+        <div>
+          <h2>Settings ⚙️</h2>
+        </div>
+        <div class="auth-buttons">
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+          
+          <!-- Profile Dropdown -->
+          <div class="user-profile-dropdown">
+            <div class="user-profile-trigger" id="profileTrigger">
+              <div class="avatar-circle" id="userInitials">U</div>
+              <div class="user-mini-details">
+                <span class="user-mini-name" id="userName">User</span>
+              </div>
+              <span style="font-size: 10px; opacity: 0.7;">▼</span>
+            </div>
+            <div class="dropdown-menu" id="profileDropdown">
+              <div class="dropdown-header">
+                <span class="dropdown-user-email" id="userEmail">user@example.com</span>
+              </div>
+              <a href="account-settings.html" class="dropdown-item">⚙️ Settings</a>
+              <a href="about-us.html" class="dropdown-item">👤 About Us</a>
+              <div class="dropdown-divider"></div>
+              <button id="logoutBtn" class="dropdown-item logout">🚪 Logout</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="settings-container">
+        <!-- Alert Messages -->
+        <div id="alertContainer"></div>
+
+        <!-- Profile Section -->
+        <div class="settings-section">
+          <h3>👤 Profile Information</h3>
+          <div class="profile-avatar" id="avatarPlaceholder">👤</div>
+          
+          <div class="info-row">
+            <div class="info-item">
+              <div class="info-label">Username</div>
+              <div class="info-value" id="displayUsername">-</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Email</div>
+              <div class="info-value" id="displayEmail">-</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="newUsername">Change Username</label>
+            <input type="text" id="newUsername" placeholder="Enter new username">
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" id="updateProfileBtn">Update Profile</button>
+          </div>
+        </div>
+
+        <!-- Password Section -->
+        <div class="settings-section">
+          <h3>🔐 Change Password</h3>
+          
+          <div class="form-group">
+            <label for="currentPassword">Current Password</label>
+            <input type="password" id="currentPassword" placeholder="Enter current password">
+          </div>
+
+          <div class="form-group">
+            <label for="newPassword">New Password</label>
+            <input type="password" id="newPassword" placeholder="Enter new password">
+          </div>
+
+          <div class="form-group">
+            <label for="confirmPassword">Confirm New Password</label>
+            <input type="password" id="confirmPassword" placeholder="Confirm new password">
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" id="updatePasswordBtn">Update Password</button>
+          </div>
+        </div>
+
+        <!-- Preferences Section -->
+        <div class="settings-section">
+          <h3>🎨 Preferences</h3>
+
+          <div class="form-group">
+            <label for="themeSelect">Theme</label>
+            <select id="themeSelect">
+              <option value="dark">Dark Mode</option>
+              <option value="light">Light Mode</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="emailNotifications">Email Notifications</label>
+            <select id="emailNotifications">
+              <option value="all">All Notifications</option>
+              <option value="important">Important Only</option>
+              <option value="none">Disabled</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="settings-section" style="border-color: rgba(239, 68, 68, 0.2);">
+          <h3 style="color: #ef4444;">⚠️ Danger Zone</h3>
+
+          <p style="color: var(--muted); margin-bottom: 15px; font-size: 14px;">
+            These actions are irreversible. Please be careful.
+          </p>
+
+          <div class="button-group">
+            <button class="btn btn-danger" id="deleteAccountBtn">Delete Account</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2024 PriorInboX. All rights reserved.</p>
+  </footer>
+
+  <script>
+    const apiUrl = 'http://localhost:5000/api';
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function getUser() {
+      const user = localStorage.getItem('user');
+      return user ? JSON.parse(user) : null;
+    }
+
+    function showAlert(message, type = 'success') {
+      const alertContainer = document.getElementById('alertContainer');
+      const alert = document.createElement('div');
+      
+      const iconMap = {
+        success: '✓',
+        error: '✕',
+        warning: '!'
+      };
+      
+      alert.className = `alert alert-${type}`;
+      alert.innerHTML = `
+        <span class="alert-icon">${iconMap[type]}</span>
+        <span class="alert-text">${message}</span>
+      `;
+      alertContainer.appendChild(alert);
+
+      setTimeout(() => {
+        alert.style.opacity = '0';
+        setTimeout(() => alert.remove(), 300);
+      }, 4000);
+    }
+
+    function initializeApp() {
+      const token = getToken();
+      const user = getUser();
+
+      if (!token || !user) {
+        window.location.href = 'form/form-home.html';
+        return;
+      }
+
+      const name = user.username || user.name || 'User';
+      document.getElementById('userEmail').textContent = user.email;
+      document.getElementById('userName').textContent = name;
+      document.getElementById('userInitials').textContent = name.charAt(0).toUpperCase();
+      document.getElementById('displayUsername').textContent = name;
+      document.getElementById('displayEmail').textContent = user.email;
+      document.getElementById('newUsername').value = user.username || '';
+
+      if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light');
+        document.getElementById('themeSelect').value = 'light';
+        document.getElementById('themeToggle').textContent = '☀️';
+      }
+
+      setupEventListeners();
+    }
+
+    function setupEventListeners() {
+      // Logout
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = 'form/form-home.html';
+      });
+
+      // Theme Toggle
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        document.body.classList.toggle('light');
+        localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+        document.getElementById('themeSelect').value = document.body.classList.contains('light') ? 'light' : 'dark';
+        document.getElementById('themeToggle').textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
+      });
+
+      // Profile update
+      document.getElementById('updateProfileBtn').addEventListener('click', updateProfile);
+      
+      // Password update
+      document.getElementById('updatePasswordBtn').addEventListener('click', updatePassword);
+      
+      // Delete account
+      document.getElementById('deleteAccountBtn').addEventListener('click', deleteAccount);
+      
+      // Theme select
+      document.getElementById('themeSelect').addEventListener('change', (e) => {
+        const isLight = e.target.value === 'light';
+        document.body.classList.toggle('light', isLight);
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+      });
+
+      // Profile Dropdown
+      const profileTrigger = document.getElementById('profileTrigger');
+      const profileDropdown = document.getElementById('profileDropdown');
+      if (profileTrigger && profileDropdown) {
+        profileTrigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          profileDropdown.classList.toggle('show');
+        });
+        document.addEventListener('click', () => {
+          profileDropdown.classList.remove('show');
+        });
+      }
+    }
+
+    function updateProfile() {
+      showAlert('Profile update coming soon!', 'warning');
+    }
+
+    function updatePassword() {
+      showAlert('Password update coming soon!', 'warning');
+    }
+
+    async function updateProfile() {
+      const newUsername = document.getElementById('newUsername').value;
+      
+      if (!newUsername) {
+        showAlert('Please enter a username', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/auth/update-profile`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`
+          },
+          body: JSON.stringify({ username: newUsername })
+        });
+
+        if (response.ok) {
+          const user = getUser();
+          user.username = newUsername;
+          localStorage.setItem('user', JSON.stringify(user));
+          document.getElementById('displayUsername').textContent = newUsername;
+          showAlert('Profile updated successfully!', 'success');
+        } else {
+          const error = await response.json();
+          showAlert(error.message || 'Failed to update profile', 'error');
+        }
+      } catch (error) {
+        showAlert('Error updating profile', 'error');
+      }
+    }
+
+    async function updatePassword() {
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        showAlert('All fields are required', 'error');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showAlert('New passwords do not match', 'error');
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        showAlert('Password must be at least 6 characters', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/auth/change-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`
+          },
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        if (response.ok) {
+          document.getElementById('currentPassword').value = '';
+          document.getElementById('newPassword').value = '';
+          document.getElementById('confirmPassword').value = '';
+          showAlert('Password changed successfully!', 'success');
+        } else {
+          const error = await response.json();
+          showAlert(error.message || 'Failed to change password', 'error');
+        }
+      } catch (error) {
+        showAlert('Error changing password', 'error');
+      }
+    }
+
+    async function deleteAccountConfirmed() {
+      try {
+        const response = await fetch(`${apiUrl}/auth/delete-account`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${getToken()}`
+          }
+        });
+
+        if (response.ok) {
+          showAlert('Account deleted. Redirecting...', 'success');
+          setTimeout(() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = 'form/form-home.html';
+          }, 2000);
+        } else {
+          const error = await response.json();
+          showAlert(error.message || 'Failed to delete account', 'error');
+        }
+      } catch (error) {
+        showAlert('Error deleting account', 'error');
+      }
+    }
+
+    function deleteAccount() {
+      if (confirm('Are you sure? This action cannot be undone!')) {
+        deleteAccountConfirmed();
+      }
+    }
+
+    // Theme Toggle
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('light');
+      localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+      document.getElementById('themeSelect').value = document.body.classList.contains('light') ? 'light' : 'dark';
+      document.getElementById('themeToggle').textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
+    });
+
+    document.addEventListener('DOMContentLoaded', initializeApp);
+  </script>
+  <script src="navbar.js"></script>
+</body>
+</html>

@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emails - PriorInBox</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./priorInboX-home.css">
+  <!-- Security: DOMPurify for XSS prevention -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">PriorInBox</div>
+      <ul>
+        <li><a href="priorInboX-home.html">🏠 Home</a></li>
+        <li class="active"><a href="emails.html">📨 Emails</a></li>
+        <li><a href="account-settings.html">⚙️ Settings</a></li>
+        <li><a href="about-us.html">👤 About Us</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+      <!-- Hamburger Menu for Mobile -->
+      <button class="hamburger-menu" id="hamburgerMenu">☰</button>
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+      <!-- Top -->
+      <header class="topbar">
+        <div>
+          <h2>Your Emails 📨</h2>
+          <p class="user-info" id="userEmail"></p>
+        </div>
+        <div class="auth-buttons">
+          <button class="topbar-btn" id="tasksToggle" title="Toggle tasks panel">📋 Tasks</button>
+          <button class="topbar-btn" id="calendarToggle" title="Toggle calendar panel">📅 Calendar</button>
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+          <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
+      </header>
+
+      <div class="email-container">
+        <!-- Accounts Sidebar -->
+        <div class="sidebar-accounts">
+          <h3>📧 Email Accounts</h3>
+          <ul class="account-list" id="accountsList"></ul>
+          <button class="add-account-btn" id="addAccountBtn">+ Add Email Account</button>
+        </div>
+
+        <!-- Emails Panel -->
+        <div class="emails-panel">
+          <div class="emails-header">
+            <h3>Inbox</h3>
+            <button class="refresh-btn" id="refreshBtn" style="background: none; border: none; color: var(--accent); cursor: pointer; font-size: 18px;">🔄</button>
+          </div>
+
+          <div class="email-filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="important">⭐ Important</button>
+            <button class="filter-btn" data-filter="unread">Unread</button>
+          </div>
+
+          <div id="emailsList" style="flex: 1; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Email Detail Modal -->
+  <div class="email-detail" id="emailDetail">
+    <div class="detail-content">
+      <div class="detail-header">
+        <h2>Email Details</h2>
+        <button class="close-detail" id="closeDetail">&times;</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2024 PriorInboX. All rights reserved.</p>
+  </footer>
+
+  <script>
+    const apiUrl = 'http://localhost:5000/api';
+    let selectedAccount = null;
+    let allEmails = [];
+    let currentFilter = 'all';
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      // Check if user is authenticated
+      const token = getToken();
+      const user = getUser();
+      
+      if (!token || !user) {
+        // Redirect to login if not authenticated
+        alert('Please login to access your emails');
+        window.location.href = 'form/form-home.html';
+        return;
+      }
+
+      // Verify token is valid (not a demo token)
+      if (token.startsWith('demo_token_')) {
+        alert('Please login with a valid account');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = 'form/form-home.html';
+        return;
+      }
+
+      const theme = localStorage.getItem('theme');
+      
+      document.getElementById('userEmail').textContent = user.email || 'user@example.com';
+      
+      if (theme === 'light') {
+        document.body.classList.add('light');
+        document.getElementById('themeToggle').textContent = '☀️';
+      }
+
+      setupEventListeners();
+      loadEmailAccounts();
+      handleOAuthCallback();
+    });
+
+    function setupEventListeners() {
+      document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+      document.getElementById('logoutBtn').addEventListener('click', logout);
+      document.getElementById('addAccountBtn').addEventListener('click', showEmailAccountModal);
+      
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          currentFilter = e.target.dataset.filter;
+        });
+      });
+
+      document.getElementById('refreshBtn')?.addEventListener('click', () => {
+        alert('Refresh functionality coming soon!');
+      });
+
+      // Hamburger menu
+      const hamburgerMenu = document.getElementById('hamburgerMenu');
+      const sidebar = document.querySelector('.sidebar');
+      const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+      if (hamburgerMenu && sidebar && sidebarOverlay) {
+        hamburgerMenu.addEventListener('click', () => {
+          sidebar.classList.toggle('active');
+          sidebarOverlay.classList.toggle('active');
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+          sidebar.classList.remove('active');
+          sidebarOverlay.classList.remove('active');
+        });
+      }
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle('light');
+      const isLight = document.body.classList.contains('light');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'form/form-home.html';
+    }
+
+    // OAuth Providers Configuration
+    const oauthProviders = [
+      {
+        name: 'Gmail',
+        id: 'gmail',
+        icon: '📧',
+        color: '#EA4335'
+      },
+      {
+        name: 'Outlook',
+        id: 'outlook',
+        icon: '💼',
+        color: '#0078D4'
+      },
+      {
+        name: 'Yahoo',
+        id: 'yahoo',
+        icon: '🟣',
+        color: '#6B4C9A'
+      }
+    ];
+
+    function showEmailAccountModal() {
+      // Create modal overlay
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      
+      const modalContent = document.createElement('div');
+      modalContent.className = 'modal-content email-account-modal';
+      
+      const providerButtons = oauthProviders.map(provider => `
+        <button class="provider-btn" onclick="connectEmailAccount('${provider.id}', event)" style="border-left: 4px solid ${provider.color}">
+          <span class="provider-icon">${provider.icon}</span>
+          <span class="provider-name">Connect ${provider.name}</span>
+          <span class="provider-arrow">→</span>
+        </button>
+      `).join('');
+
+      modalContent.innerHTML = `
+        <div class="modal-icon">📧</div>
+        <h2 class="modal-title">Connect Email Account</h2>
+        <p class="modal-description">Choose your email provider to get started</p>
+        <div class="provider-list">
+          ${providerButtons}
+        </div>
+        <div class="modal-security-note">
+          <strong>🔒 Secure:</strong> Your credentials are encrypted and never shared with third parties
+        </div>
+        <button class="modal-btn modal-btn-secondary" onclick="closeEmailAccountModal()" style="margin-top: 16px;">Cancel</button>
+      `;
+      
+      overlay.appendChild(modalContent);
+      
+      // Close on overlay click
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          closeEmailAccountModal();
+        }
+      });
+      
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeEmailAccountModal();
+        }
+      });
+      
+      document.body.appendChild(overlay);
+      overlay.id = 'email-account-modal';
+    }
+
+    function closeEmailAccountModal() {
+      const modal = document.getElementById('email-account-modal');
+      if (modal) {
+        modal.remove();
+      }
+    }
+
+    async function connectEmailAccount(providerId, event) {
+      try {
+        // Check authentication first
+        const token = getToken();
+        if (!token || token.startsWith('demo_token_')) {
+          showErrorAlert('Please login first to connect your email account');
+          setTimeout(() => {
+            window.location.href = 'form/form-home.html';
+          }, 2000);
+          return;
+        }
+
+        const button = event ? event.target.closest('.provider-btn') : null;
+        if (button) {
+          button.disabled = true;
+          button.innerHTML = '<span class="spinner-small"></span> Connecting...';
+        }
+
+        const response = await fetch(`${apiUrl}/email-accounts/oauth/authorize?provider=${providerId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.status === 401) {
+          // Token is invalid or expired
+          showErrorAlert('Your session has expired. Please login again.');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setTimeout(() => {
+            window.location.href = 'form/form-home.html';
+          }, 2000);
+          return;
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Failed to get authorization URL: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.authUrl) {
+          // Store the provider and provider data for callback handling
+          sessionStorage.setItem('oauth_provider', providerId);
+          sessionStorage.setItem('oauth_state', data.state || '');
+          
+          // Redirect to OAuth provider
+          window.location.href = data.authUrl;
+        } else {
+          throw new Error('No authorization URL provided');
+        }
+      } catch (error) {
+        console.error('Error connecting account:', error);
+        showErrorAlert(`Failed to connect email account: ${error.message}`);
+        if (event && event.target) {
+          const button = event.target.closest('.provider-btn');
+          if (button) {
+            button.disabled = false;
+            const provider = oauthProviders.find(p => p.id === providerId);
+            button.innerHTML = `
+              <span class="provider-icon">${provider?.icon || '📧'}</span>
+              <span class="provider-name">Connect ${provider?.name || providerId}</span>
+              <span class="provider-arrow">→</span>
+            `;
+          }
+        }
+      }
+    }
+
+    function handleOAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const accountConnected = params.get('account_connected');
+      const provider = params.get('provider');
+      const error = params.get('error');
+
+      if (error) {
+        showErrorAlert(`Connection Failed: ${decodeURIComponent(error)}`);
+        // Clear URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (accountConnected && provider) {
+        showSuccessAlert(`✅ Successfully connected ${accountConnected}!`);
+        loadEmailAccounts(); // This will load accounts and auto-sync
+        // Clear URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
+    function showSuccessAlert(message) {
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-success';
+      alert.innerHTML = `
+        <div class="alert-content">
+          <span>${message}</span>
+          <button onclick="this.parentElement.parentElement.remove()" class="alert-close">✕</button>
+        </div>
+      `;
+      document.body.insertBefore(alert, document.body.firstChild);
+      setTimeout(() => alert.remove(), 5000);
+    }
+
+    function showErrorAlert(message) {
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-error';
+      alert.innerHTML = `
+        <div class="alert-content">
+          <span>${message}</span>
+          <button onclick="this.parentElement.parentElement.remove()" class="alert-close">✕</button>
+        </div>
+      `;
+      document.body.insertBefore(alert, document.body.firstChild);
+      setTimeout(() => alert.remove(), 5000);
+    }
+
+    function showComingSoonModal() {
+      // Check authentication before showing modal
+      const token = getToken();
+      if (!token || token.startsWith('demo_token_')) {
+        showErrorAlert('Please login first to connect your email account');
+        setTimeout(() => {
+          window.location.href = 'form/form-home.html';
+        }, 2000);
+        return;
+      }
+      showEmailAccountModal();
+    }
+
+    function closeComingSoonModal() {
+      closeEmailAccountModal();
+    }
+
+    function showConfirmModal(title, message, callback) {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      
+      const modalContent = document.createElement('div');
+      modalContent.className = 'modal-content';
+      modalContent.innerHTML = `
+        <div class="modal-icon">⚠️</div>
+        <h2 class="modal-title">${title}</h2>
+        <p class="modal-description">${message}</p>
+        <div class="modal-buttons">
+          <button class="modal-btn modal-btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+          <button class="modal-btn modal-btn-primary" onclick="handleConfirmAction()">Confirm</button>
+        </div>
+      `;
+      
+      overlay.appendChild(modalContent);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          closeConfirmModal();
+        }
+      });
+      
+      document.body.appendChild(overlay);
+      overlay.id = 'confirm-modal';
+      window.confirmCallback = callback;
+    }
+
+    function closeConfirmModal() {
+      const modal = document.getElementById('confirm-modal');
+      if (modal) {
+        modal.remove();
+        window.confirmCallback = null;
+      }
+    }
+
+    function handleConfirmAction() {
+      if (window.confirmCallback) {
+        window.confirmCallback();
+      }
+      closeConfirmModal();
+    }
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function getUser() {
+      const user = localStorage.getItem('user');
+      return user ? JSON.parse(user) : null;
+    }
+
+    async function loadEmailAccounts() {
+      try {
+        const token = getToken();
+        
+        // Check if user is authenticated
+        if (!token) {
+          console.warn('No token found. User may not be logged in.');
+          renderAccounts([]);
+          return;
+        }
+
+        const response = await fetch(`${apiUrl}/email-accounts`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const accounts = data.accounts || data; // Handle both response formats
+          renderAccounts(accounts);
+          
+          if (accounts.length > 0) {
+            selectedAccount = accounts[0].id;
+            
+            // Auto-sync emails for first account
+            console.log('🔄 Auto-syncing emails for account:', selectedAccount);
+            if (emailManager && emailManager.syncEmails) {
+              await emailManager.syncEmails(selectedAccount);
+            }
+            
+            loadEmails();
+          }
+        } else if (response.status === 401) {
+          console.error('Unauthorized: Token may be invalid or expired');
+          renderAccounts([]);
+        } else {
+          console.error('Failed to load accounts:', response.statusText);
+          renderAccounts([]);
+        }
+      } catch (error) {
+        console.error('Error loading accounts:', error);
+        renderAccounts([]);
+      }
+    }
+
+    function renderAccounts(accounts) {
+      const accountsList = document.getElementById('accountsList');
+      accountsList.innerHTML = '';
+
+      if (accounts.length === 0) {
+        accountsList.innerHTML = `
+          <li class="no-accounts">
+            <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+              <div style="font-size: 32px; margin-bottom: 10px;">📧</div>
+              <div>No email accounts connected</div>
+              <button class="account-connect-btn" onclick="showEmailAccountModal()" style="margin-top: 10px; padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">
+                + Add Account
+              </button>
+            </div>
+          </li>
+        `;
+        return;
+      }
+
+      accounts.forEach(account => {
+        const li = document.createElement('li');
+        li.className = `account-item ${account.id === selectedAccount ? 'active' : ''}`;
+        
+        const lastSynced = account.last_synced ? new Date(account.last_synced).toLocaleDateString() : 'Never';
+        const providerIcon = getProviderIcon(account.provider);
+        
+        li.innerHTML = `
+          <div class="account-info" onclick="selectAccount(${account.id})">
+            <div class="account-header">
+              <span class="account-provider-icon">${providerIcon}</span>
+              <div class="account-details">
+                <div class="account-email">${account.email}</div>
+                <div class="account-provider">${account.provider}</div>
+              </div>
+            </div>
+            <div class="account-sync-status">Synced: ${lastSynced}</div>
+          </div>
+          <div class="account-actions">
+            <button class="action-btn sync-btn" onclick="syncAccount(${account.id}, event)" title="Sync emails">🔄</button>
+            <button class="action-btn disconnect-btn" onclick="disconnectAccount(${account.id}, event)" title="Disconnect account">✕</button>
+          </div>
+        `;
+        
+        accountsList.appendChild(li);
+      });
+    }
+
+    function getProviderIcon(provider) {
+      const icons = {
+        'gmail': '📧',
+        'outlook': '💼',
+        'yahoo': '🟣',
+        'imap': '📮'
+      };
+      return icons[provider.toLowerCase()] || '📧';
+    }
+
+    function selectAccount(accountId) {
+      selectedAccount = accountId;
+      document.querySelectorAll('.account-item').forEach(el => el.classList.remove('active'));
+      event.currentTarget.closest('.account-item').classList.add('active');
+      loadEmails();
+    }
+
+    async function syncAccount(accountId, event) {
+      event.stopPropagation();
+      
+      const button = event.target;
+      const originalContent = button.innerHTML;
+      button.innerHTML = '⏳';
+      button.disabled = true;
+
+      try {
+        const response = await fetch(`${apiUrl}/email-accounts/${accountId}/sync`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (response.ok) {
+          showSuccessAlert('✅ Emails synced successfully!');
+          loadEmailAccounts();
+        } else {
+          throw new Error('Sync failed');
+        }
+      } catch (error) {
+        console.error('Error syncing account:', error);
+        showErrorAlert('Failed to sync emails');
+      } finally {
+        button.innerHTML = originalContent;
+        button.disabled = false;
+      }
+    }
+
+    function disconnectAccount(accountId, event) {
+      event.stopPropagation();
+      
+      const accountItem = event.target.closest('.account-item');
+      const email = accountItem.querySelector('.account-email').textContent;
+      
+      showConfirmModal(
+        'Disconnect Account',
+        `Are you sure you want to disconnect ${email}? You'll need to reconnect to access these emails again.`,
+        async () => {
+          try {
+            const response = await fetch(`${apiUrl}/email-accounts/${accountId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+
+            if (response.ok) {
+              showSuccessAlert('✅ Account disconnected successfully!');
+              loadEmailAccounts();
+            } else {
+              throw new Error('Disconnect failed');
+            }
+          } catch (error) {
+            console.error('Error disconnecting account:', error);
+            showErrorAlert('Failed to disconnect account');
+          }
+        }
+      );
+    }
+
+    async function loadEmails() {
+      if (!selectedAccount) return;
+
+      const emailsList = document.getElementById('emailsList');
+      emailsList.innerHTML = '<div class="loading"><div class="spinner"></div>Loading emails...</div>';
+
+      try {
+        const response = await fetch(`${apiUrl}/emails?account=${selectedAccount}&filter=${currentFilter}`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (response.ok) {
+          allEmails = await response.json();
+          filterAndRenderEmails();
+        } else {
+          emailsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div>No emails found</div>';
+        }
+      } catch (error) {
+        console.error('Error loading emails:', error);
+        emailsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div>Error loading emails</div>';
+      }
+    }
+
+    function filterAndRenderEmails() {
+      const emailsList = document.getElementById('emailsList');
+      
+      let filtered = allEmails;
+      if (currentFilter === 'important') {
+        filtered = allEmails.filter(email => email.is_important);
+      } else if (currentFilter === 'unread') {
+        filtered = allEmails.filter(email => !email.is_read);
+      }
+
+      if (filtered.length === 0) {
+        emailsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div>No emails found</div>';
+        return;
+      }
+
+      emailsList.innerHTML = filtered.map(email => `
+        <div class="email-item ${email.is_important ? 'important' : ''}" onclick="showEmailDetail('${email.id}', '${email.from_address}', '${email.subject}', '${email.body.replace(/'/g, "\\'")}')">
+          <div class="email-header">
+            <div class="email-from">${email.from_address}</div>
+            <div class="email-date">${new Date(email.created_at).toLocaleDateString()}</div>
+          </div>
+          <div class="email-subject">${email.subject}</div>
+          <div class="email-preview">${email.body.substring(0, 100)}</div>
+          ${email.is_important ? '<div class="email-badge">⭐ Important</div>' : ''}
+        </div>
+      `).join('');
+    }
+
+    function showEmailDetail(id, from, subject, body) {
+      const emailDetail = document.getElementById('emailDetail');
+      const detailBody = document.getElementById('detailBody');
+
+      detailBody.innerHTML = `
+        <div class="detail-from">
+          <div class="detail-label">From</div>
+          <div class="detail-value">${from}</div>
+        </div>
+        <div class="detail-from">
+          <div class="detail-label">Subject</div>
+          <div class="detail-value">${subject}</div>
+        </div>
+        <div class="detail-body">${body}</div>
+        <div class="detail-actions" style="margin-top: 20px; display: flex; gap: 10px;">
+          <button onclick="createTaskFromEmail('${id}', '${subject.replace(/'/g, "\\'")}', '${body.substring(0, 100).replace(/'/g, "\\'")}')" style="flex: 1; padding: 10px; background: #17c1e8; color: white; border: none; border-radius: 6px; cursor: pointer;">📋 Create Task</button>
+          <button onclick="addToCalendar('${id}', '${subject.replace(/'/g, "\\'")}')" style="flex: 1; padding: 10px; background: #9b59b6; color: white; border: none; border-radius: 6px; cursor: pointer;">📅 Add to Calendar</button>
+        </div>
+      `;
+
+      emailDetail.classList.add('show');
+    }
+
+    document.getElementById('closeDetail').addEventListener('click', () => {
+      document.getElementById('emailDetail').classList.remove('show');
+    });
+
+    document.getElementById('emailDetail').addEventListener('click', (e) => {
+      if (e.target.id === 'emailDetail') {
+        document.getElementById('emailDetail').classList.remove('show');
+      }
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        filterAndRenderEmails();
+      });
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadEmails);
+
+    // Theme Toggle
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('light');
+      localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+      document.getElementById('themeToggle').textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      showConfirmModal('Logout', 'Are you sure you want to logout?', () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = 'index.html';
+      });
+    });
+
+    function initializeApp() {
+      const token = getToken();
+      const user = getUser();
+
+      if (!token || !user) {
+        window.location.href = 'form/form-home.html';
+        return;
+      }
+
+      document.getElementById('userEmail').textContent = user.email;
+
+      if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light');
+        document.getElementById('themeToggle').textContent = '☀️';
+      }
+
+      // Handle OAuth callback
+      handleOAuthCallback();
+      
+      // Load email accounts
+      loadEmailAccounts();
+    }
+
+    // Create a task from an email
+    async function createTaskFromEmail(emailId, subject, preview) {
+      const dueDate = prompt('Enter due date (YYYY-MM-DD) or leave empty for no due date:');
+      const priority = prompt('Enter priority (high/medium/low) or leave empty for medium:', 'medium');
+      
+      try {
+        const response = await fetch(`${apiUrl}/tasks`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getToken()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: subject,
+            description: preview,
+            status: 'pending',
+            priority: priority || 'medium',
+            due_date: dueDate || null
+          })
+        });
+
+        if (response.ok) {
+          showSuccessAlert('✅ Task created from email!');
+          document.getElementById('emailDetail').classList.remove('show');
+        } else {
+          throw new Error('Failed to create task');
+        }
+      } catch (error) {
+        console.error('Error creating task:', error);
+        showErrorAlert('Failed to create task');
+      }
+    }
+
+    // Add email to calendar
+    async function addToCalendar(emailId, subject) {
+      const eventDate = prompt('Enter event date (YYYY-MM-DD):');
+      
+      if (!eventDate) return;
+      
+      try {
+        const response = await fetch(`${apiUrl}/calendar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getToken()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: subject,
+            event_date: eventDate,
+            description: `From email: ${subject}`
+          })
+        });
+
+        if (response.ok) {
+          showSuccessAlert('✅ Added to calendar!');
+          document.getElementById('emailDetail').classList.remove('show');
+        } else {
+          throw new Error('Failed to add to calendar');
+        }
+      } catch (error) {
+        console.error('Error adding to calendar:', error);
+        showErrorAlert('Failed to add to calendar');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', initializeApp);
+
+    // Toggle task and calendar panels
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('tasksToggle').addEventListener('click', toggleTasksPanel);
+      document.getElementById('calendarToggle').addEventListener('click', toggleCalendarPanel);
+    });
+  </script>
+  <script src="email-manager.js"></script>
+  <script>
+    // Initialize EmailManager once it's loaded
+    const emailManager = new EmailManager();
+  </script>
+
+  <!-- Include Task Panel HTML and Scripts -->
+  <div id="tasksContainer"></div>
+  <script>
+    // Load tasks panel HTML
+    fetch('tasks-panel.html')
+      .then(r => r.text())
+      .then(html => {
+        document.getElementById('tasksContainer').innerHTML = html;
+      });
+  </script>
+
+  <!-- Include Calendar Panel HTML and Scripts -->
+  <div id="calendarContainer"></div>
+  <script>
+    // Load calendar panel HTML
+    fetch('calendar-panel.html')
+      .then(r => r.text())
+      .then(html => {
+        document.getElementById('calendarContainer').innerHTML = html;
+      });
+  </script>
+
+  <script src="navbar.js"></script>
+</body>
+</html>
